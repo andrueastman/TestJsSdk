@@ -1,8 +1,9 @@
 import React,{ useEffect } from 'react';
 import logo from './logo.svg';
 import './App.css';
+import * as fs from "fs";
 import { InteractiveBrowserCredential } from '@azure/identity';
-import { Client } from '@microsoft/microsoft-graph-client';
+import { Client, LargeFileUploadTask, FileUpload, UploadEventHandlers, OneDriveLargeFileUploadOptions, OneDriveLargeFileUploadTask, UploadResult, LargeFileUploadTaskOptions } from '@microsoft/microsoft-graph-client';
 import {
   TokenCredentialAuthenticationProvider,
   TokenCredentialAuthenticationProviderOptions,
@@ -10,7 +11,7 @@ import {
 
 function App() {
   const tokenCredential = new InteractiveBrowserCredential({
-    clientId: ""
+    clientId: "d662ac70-7482-45af-9dc3-c3cde8eeede4"
   });
 
   const options: TokenCredentialAuthenticationProviderOptions = {
@@ -31,6 +32,8 @@ function App() {
   // Similar to componentDidMount and componentDidUpdate:
   useEffect(() => {
     const fetchData = async () => {
+
+      // Make simple request to graph
       const user = await client
         .api(`/users/`)
         .get()
@@ -39,6 +42,41 @@ function App() {
         });
 
       console.log(user);
+
+      const payload = {
+        item: {
+          "@microsoft.graph.conflictBehavior": "rename",
+          name: "<FILE_NAME>",
+        },
+      };
+
+      // Try to make a upload of a large file
+      const uploadSession = await LargeFileUploadTask.createUploadSession(client, "REQUEST_URL", payload); // TODO bug in docs
+      const fileName = "<FILE_NAME>";
+      const stats = fs.statSync(`./test/sample_files/${fileName}`);
+      const totalsize = stats.size;
+      const readStream = fs.readFileSync(`./test/sample_files/${fileName}`);
+      const fileObject = new FileUpload(readStream, fileName, totalsize);
+
+      const progress = (range?: Range, extraCallBackParam?: unknown) => {
+        // Handle progress event
+        console.log(range);
+      };
+      
+      const uploadEventHandlers: UploadEventHandlers = {
+        progress,
+        extraCallBackParam: true,
+      };
+      
+      const options: LargeFileUploadTaskOptions = {
+        rangeSize: 327680,
+        uploadEventHandlers: uploadEventHandlers,
+      };
+
+      const uploadTask = new LargeFileUploadTask(client, fileObject, uploadSession, options);
+      const uploadResult: UploadResult = await uploadTask.upload();
+
+      console.log(uploadResult);
     }
 
     fetchData();
